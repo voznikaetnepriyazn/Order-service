@@ -1,6 +1,6 @@
 {
   "env": "local",
-  "storage_path": "host=localhost port=5432 user=postgres password=sveta123 dbname=Order sslmode=disable",
+  "storage_path": "host=postgres port=5432 user=postgres password=sveta123 dbname=Order sslmode=disable",
 
 "http_server": {
   "address": "localhost:8080",
