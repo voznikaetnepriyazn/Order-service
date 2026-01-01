@@ -15,7 +15,6 @@ import (
 	"Order/internal/http-server/middleware"
 	"Order/internal/http-server/middleware/logger"
 
-	//services "Order/internal/services/order-service"
 	"Order/internal/storage"
 	"Order/internal/storage/postgresql"
 	"fmt"
@@ -69,6 +68,7 @@ func main() {
 		log.Error("failed to start server", slog.Any("error", err))
 		os.Exit(1)
 	}
+
 }
 
 func registerHandlers(router *gin.Engine, log *slog.Logger, service storage.OrderService) {
