@@ -7,25 +7,26 @@ import (
 	"Order/internal/http-server/middleware"
 	resp "Order/internal/lib/api/response"
 	"Order/internal/lib/logger/sl"
-	"Order/internal/lib/random"
+	"Order/internal/models/order"
 	"Order/internal/storage"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
+	"github.com/google/uuid"
 )
 
 type Response struct {
-	URL   string `json:"url" validate:"required, url"`
-	Alias string `json:"alias,omitempty" binding:"omitempty"`
+	URL string `json:"url" validate:"required, url"`
+}
+
+type RequestFullStruct struct {
+	Order order.Order
 }
 
 type Request struct {
 	resp.Response
-	URL   string `json:"url" validate:"required, url"`
-	Alias string `json:"alias,omitempty" binding:"omitempty"`
+	URL string `json:"url" validate:"required, url"`
 }
-
-const aliasLenght = 10 //may move to config
 
 type Crud interface {
 	NewAdd(log *slog.Logger, adder storage.OrderService) gin.HandlerFunc
@@ -46,9 +47,9 @@ func NewAdd(log *slog.Logger, adder storage.OrderService) gin.HandlerFunc {
 			slog.String("request_id", middleware.GetReqID(c.Request.Context())),
 		)
 
-		var req Request
+		var req RequestFullStruct
 
-		//декодирование из джэйсона в стркктуру данных
+		//декодирование из джэйсона в структуру данных
 		if err := c.ShouldBindJSON(&req); err != nil {
 			log.Error("failed to decode request body", sl.Err(err))
 
@@ -75,22 +76,17 @@ func NewAdd(log *slog.Logger, adder storage.OrderService) gin.HandlerFunc {
 			return
 		}
 
-		alias := req.Alias
-		if alias == "" {
-			alias = random.NewRandomString(aliasLenght)
-		}
-
 		//проверка на уже существующее значение
-		id, err := adder.AddURL(req.URL, alias)
-		if errors.Is(err, storage.ErrUrlExist) {
-			log.Info("url already exists", slog.String("url", req.URL))
+		id, err := adder.AddURL(req.Order)
+		/*if errors.Is(err, storage.ErrUrlExist) {
+			log.Info("url already exists", slog.Any("url", req.order))
 
 			c.JSON(400, gin.H{
 				"error": "url already exists",
 			})
 
 			return
-		}
+		}*/
 
 		//прочие ошибки
 		if err != nil {
@@ -103,16 +99,15 @@ func NewAdd(log *slog.Logger, adder storage.OrderService) gin.HandlerFunc {
 			return
 		}
 
-		log.Info("url added", slog.Int64("id", id))
+		log.Info("url added", slog.Any("id", id))
 
-		responseOK(c, alias)
+		responseOK(c)
 	}
 }
 
-func responseOK(c *gin.Context, alias string) {
+func responseOK(c *gin.Context) {
 	c.JSON(200, gin.H{
 		"status": "OK",
-		"alias":  alias,
 	})
 }
 
@@ -143,8 +138,17 @@ func NewDelete(log *slog.Logger, deleter storage.OrderService) gin.HandlerFunc {
 			return
 		}
 
-		err := deleter.DeleteURL(alias)
-		if errors.Is(err, storage.ErrUrlNotFound) {
+		id, err := uuid.Parse(alias)
+		if err != nil {
+			log.Info("invalid uuid format", slog.String("id", alias), slog.Any("error", err))
+			c.JSON(400, gin.H{
+				"error": "invalid id format",
+			})
+			return
+		}
+
+		err1 := deleter.DeleteURL(id)
+		if errors.Is(err1, storage.ErrUrlNotFound) {
 			log.Info("url not found", "id", alias)
 
 			c.JSON(400, gin.H{
@@ -154,7 +158,7 @@ func NewDelete(log *slog.Logger, deleter storage.OrderService) gin.HandlerFunc {
 			return
 		}
 
-		if err != nil {
+		if err1 != nil {
 			log.Error("failed to delete url", sl.Err(err))
 
 			c.JSON(500, gin.H{
@@ -166,7 +170,7 @@ func NewDelete(log *slog.Logger, deleter storage.OrderService) gin.HandlerFunc {
 
 		log.Info("deleted url", slog.String("deleted", alias))
 
-		responseOK(c, alias)
+		responseOK(c)
 	}
 }
 
@@ -180,18 +184,6 @@ func NewGetAll(log *slog.Logger, get storage.OrderService) gin.HandlerFunc {
 		)
 
 		var req Request
-
-		if err := c.ShouldBindJSON(&req); err != nil {
-			log.Error("failed to decode request body", sl.Err(err))
-
-			c.JSON(400, gin.H{
-				"error": "failed to decode request",
-			})
-
-			return
-		}
-
-		log.Info("request body decoded", slog.Any("request", req))
 
 		if err := validator.New().Struct(req); err != nil {
 			validateErr := err.(validator.ValidationErrors)
@@ -254,19 +246,7 @@ func NewGetById(log *slog.Logger, get storage.OrderService) gin.HandlerFunc {
 			slog.String("request_id", middleware.GetReqID(c.Request.Context())),
 		)
 
-		var req Request
-
-		if err := c.ShouldBindJSON(&req); err != nil {
-			log.Error("failed to decode request body", sl.Err(err))
-
-			c.JSON(400, gin.H{
-				"error": "failed to decode request",
-			})
-
-			return
-		}
-
-		log.Info("request body decoded", slog.Any("request", req))
+		var req RequestFullStruct
 
 		if err := validator.New().Struct(req); err != nil {
 			validateErr := err.(validator.ValidationErrors)
@@ -281,12 +261,21 @@ func NewGetById(log *slog.Logger, get storage.OrderService) gin.HandlerFunc {
 			return
 		}
 
-		id := c.Param("id")
-		if id == "" {
+		alias := c.Param("id")
+		if alias == "" {
 			log.Info("id is empty")
 
 			c.JSON(400, gin.H{
 				"error": "invalid request",
+			})
+			return
+		}
+
+		id, err := uuid.Parse(alias)
+		if err != nil {
+			log.Info("invalid uuid format", slog.String("id", alias), slog.Any("error", err))
+			c.JSON(400, gin.H{
+				"error": "invalid id format",
 			})
 			return
 		}
@@ -312,7 +301,7 @@ func NewGetById(log *slog.Logger, get storage.OrderService) gin.HandlerFunc {
 			return
 		}
 
-		log.Info("got url", slog.String("url", resURL))
+		log.Info("got url", slog.Any("url", resURL))
 
 		c.JSON(201, gin.H{
 			"url": resURL,
@@ -329,27 +318,7 @@ func NewUpdate(log *slog.Logger, update storage.OrderService) gin.HandlerFunc {
 			slog.Any("request_id", middleware.GetReqID(c.Request.Context())),
 		)
 
-		oldId := c.Param("id")
-		if oldId == "" {
-			log.Info("old id is empty")
-
-			c.JSON(400, gin.H{
-				"error": "invalid request",
-			})
-			return
-		}
-
-		newId := c.Param("id")
-		if newId == "" {
-			log.Info("new id is empty")
-
-			c.JSON(400, gin.H{
-				"error": "invalid request",
-			})
-			return
-		}
-
-		var req Request
+		var req RequestFullStruct
 
 		if err := c.ShouldBindJSON(&req); err != nil {
 			log.Error("failed to decode request body", sl.Err(err))
@@ -376,9 +345,9 @@ func NewUpdate(log *slog.Logger, update storage.OrderService) gin.HandlerFunc {
 			return
 		}
 
-		err := update.UpdateURL(oldId, newId)
+		err := update.UpdateURL(req.Order)
 		if errors.Is(err, storage.ErrUrlNotFound) {
-			log.Info("url not found", "id", oldId)
+			log.Info("url not found", "id", req)
 
 			c.JSON(404, gin.H{
 				"error": "not found",
@@ -397,9 +366,9 @@ func NewUpdate(log *slog.Logger, update storage.OrderService) gin.HandlerFunc {
 			return
 		}
 
-		log.Info("updated url", slog.String("url", newId))
+		log.Info("updated url", slog.Any("url", req))
 
-		responseOK(c, newId)
+		responseOK(c)
 	}
 }
 
@@ -412,12 +381,21 @@ func NewIsOrderCreated(log *slog.Logger, ord storage.OrderService) gin.HandlerFu
 			slog.Any("request_id", middleware.GetReqID(c.Request.Context())),
 		)
 
-		id := c.Param("id")
-		if id == "" {
+		alias := c.Param("id")
+		if alias == "" {
 			log.Info("id is empty")
 
 			c.JSON(400, gin.H{
 				"error": "invalid request",
+			})
+			return
+		}
+
+		id, err := uuid.Parse(alias)
+		if err != nil {
+			log.Info("invalid uuid format", slog.String("id", alias), slog.Any("error", err))
+			c.JSON(400, gin.H{
+				"error": "invalid id format",
 			})
 			return
 		}
@@ -470,8 +448,8 @@ func NewIsOrderCreated(log *slog.Logger, ord storage.OrderService) gin.HandlerFu
 			return
 		}
 
-		log.Info("url exist", slog.String("url", id))
+		log.Info("url exist", slog.Any("url", id))
 
-		responseOK(c, id)
+		responseOK(c)
 	}
 }

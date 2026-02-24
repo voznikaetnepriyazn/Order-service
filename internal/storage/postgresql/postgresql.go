@@ -1,9 +1,11 @@
 package postgresql
 
 import (
-	"Order/internal/storage"
+	"Order/internal/models/order"
 	"database/sql"
 	"fmt"
+
+	"github.com/google/uuid"
 )
 
 type Storage struct {
@@ -25,32 +27,30 @@ func New(storagePath string) (*Storage, error) {
 	return &Storage{db: db}, nil
 }
 
-func (s *Storage) AddURL(urlToSave string, alias string) (int64, error) {
+func (s *Storage) AddURL(order order.Order) (uuid.UUID, error) {
 	const op = "storage.postgresql.addURL"
 
+	newID := uuid.New()
+
 	stmt, err := s.db.Prepare(
-		`INSERT INTO Order (Id, IdOfClient, GoodsinOrder) 
-		VALUES (NewGuid, IdOfClient, GoodsinOrder)
+		`INSERT INTO Order ("Id", "idOfCustomer") 
+		VALUES ($1, $2)
 		`)
 	if err != nil {
-		return 0, fmt.Errorf("%s: %w", op, err)
+		return uuid.UUID{}, fmt.Errorf("%s: prepare statement: %w", op, err)
 	}
 	defer stmt.Close()
 
-	res, err := stmt.Exec(alias, "created")
+	var insertedID uuid.UUID
+	err = stmt.QueryRow(newID, order.IdOfCustomer).Scan(&insertedID)
 	if err != nil {
-		return 0, fmt.Errorf("%s: exec statement failed: %w", op, err)
+		return uuid.UUID{}, fmt.Errorf("%s: execute query: %w", op, err)
 	}
 
-	id, err := res.LastInsertId()
-	if err != nil {
-		return 0, fmt.Errorf("%s: failed to get last insert id: %w", op, err)
-	}
-
-	return id, nil
+	return insertedID, nil
 }
 
-func (s *Storage) DeleteURL(urlToSave string) error {
+func (s *Storage) DeleteURL(id uuid.UUID) error {
 	const op = "storage.postgresql.deleteURL"
 
 	stmt, err := s.db.Prepare(
@@ -60,7 +60,7 @@ func (s *Storage) DeleteURL(urlToSave string) error {
 	}
 	defer stmt.Close()
 
-	_, err = stmt.Exec(urlToSave)
+	_, err = stmt.Exec(id)
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}
@@ -68,7 +68,7 @@ func (s *Storage) DeleteURL(urlToSave string) error {
 	return nil
 }
 
-func (s *Storage) GetAllURL() ([]string, error) {
+func (s *Storage) GetAllURL() ([]order.Order, error) {
 	const op = "storage.postgresql.getAllURL"
 
 	stmt, err := s.db.Prepare(`
@@ -88,9 +88,9 @@ func (s *Storage) GetAllURL() ([]string, error) {
 	}
 	defer stmt.Close()
 
-	var orders []string
+	var orders []order.Order
 	for row.Next() {
-		var order string
+		var order order.Order
 		err := row.Scan(&order)
 		if err != nil {
 			return nil, fmt.Errorf("%s: scann failed: %w", op, err)
@@ -101,60 +101,61 @@ func (s *Storage) GetAllURL() ([]string, error) {
 	return orders, nil
 }
 
-func (s *Storage) GetByIdURL(id string) (string, error) {
+func (s *Storage) GetByIdURL(id uuid.UUID) (uuid.UUID, error) {
 	const op = "storage.postgresql.getByIdURL"
 
 	stmt, err := s.db.Prepare(`
 	SELECT * FROM dbo.Order WHERE id=Id'
 	`)
 	if err != nil {
-		return "", fmt.Errorf("%s: %w", op, err)
+		return uuid.UUID{}, fmt.Errorf("%s: %w", op, err)
 	}
 	defer stmt.Close()
 
-	var order int64
+	var order uuid.UUID
 	err = stmt.QueryRow(id).Scan(&order)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return "", fmt.Errorf("%s: order not found", op)
+			return uuid.UUID{}, fmt.Errorf("%s: order not found", op)
 		}
-		return "", fmt.Errorf("%s: %w", op, err)
+		return uuid.UUID{}, fmt.Errorf("%s: %w", op, err)
 	}
 
-	return id, nil
+	return order, nil
 }
 
-func (s *Storage) UpdateURL(oldUrl string, urlToSave string) error {
+func (s *Storage) UpdateURL(order order.Order) error {
 	const op = "storage.postgresql.updateURL"
 
-	stmt, err := s.db.Prepare(`
-		UPDATE dbo.Order SET IdOfClient=order.IdOfClient 
-		WHERE Id=order.Id
+	newID := uuid.New()
+
+	stmt, err := s.db.Prepare(
+		`INSERT INTO Order ("Id", "idOfCustomer") 
+		VALUES ($1, $2)
 		`)
 	if err != nil {
-		return fmt.Errorf("%s: %w", op, err)
+		return fmt.Errorf("%s: prepare statement: %w", op, err)
 	}
 	defer stmt.Close()
 
-	_, err = stmt.Exec(urlToSave)
+	var insertedID uuid.UUID
+	err = stmt.QueryRow(newID, order.IdOfCustomer).Scan(&insertedID)
 	if err != nil {
-		return fmt.Errorf("%s: %w", op, err)
+		return fmt.Errorf("%s: execute query: %w", op, err)
 	}
 
 	return nil
 }
 
-func (s *Storage) IsOrderCreatedURL(id string) (bool, error) {
-	order, err := s.GetByIdURL(id)
+func (s *Storage) IsOrderCreatedURL(id uuid.UUID) (bool, error) {
+	ord, err := s.GetByIdURL(id)
 	if err != nil {
 		return false, err
 	}
 
-	if order == "" {
+	if ord == (uuid.UUID{}) {
 		return false, err
 	}
 
 	return true, nil
 }
-
-var _ storage.OrderService = (*Storage)(nil)

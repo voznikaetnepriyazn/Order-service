@@ -1,6 +1,11 @@
 package storage
 
-import "errors"
+import (
+	"Order/internal/models/order"
+	"errors"
+
+	"github.com/google/uuid"
+)
 
 var (
 	ErrUrlNotFound = errors.New("url not found")
@@ -8,15 +13,15 @@ var (
 )
 
 type OrderService interface {
-	AddURL(urlToSave string, alias string) (int64, error)
+	AddURL(order order.Order) (uuid.UUID, error)
 
-	DeleteURL(urlToSave string) error
+	DeleteURL(id uuid.UUID) error
 
-	GetAllURL() ([]string, error)
+	GetAllURL() ([]order.Order, error)
 
-	GetByIdURL(id string) (string, error)
+	GetByIdURL(id uuid.UUID) (uuid.UUID, error)
 
-	UpdateURL(oldUrl string, urlToSave string) error
+	UpdateURL(order order.Order) error
 
-	IsOrderCreatedURL(id string) (bool, error)
+	IsOrderCreatedURL(id uuid.UUID) (bool, error)
 }

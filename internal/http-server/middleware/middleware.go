@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// генерация ид запроса
 func RequestID() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := fmt.Sprintf("%d", time.Now().UnixNano())
@@ -20,6 +21,7 @@ func RequestID() gin.HandlerFunc {
 	}
 }
 
+// перехват паники - обертка запроса в дефер и рековер
 func Recoverer(log *slog.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		defer func() {
@@ -47,6 +49,7 @@ func Recoverer(log *slog.Logger) gin.HandlerFunc {
 	}
 }
 
+// получение ид из контекста
 func GetReqID(ctx context.Context) string {
 	if ctx == nil {
 		return ""
