@@ -5,6 +5,7 @@ import (
 	"log/slog"
 
 	"Order/internal/http-server/middleware/logger"
+	uuidparam "Order/internal/http-server/middleware/uuid"
 	resp "Order/internal/lib/api/response"
 	"Order/internal/lib/logger/sl"
 	"Order/internal/models/order"
@@ -12,7 +13,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
-	"github.com/google/uuid"
 )
 
 type Response struct {
@@ -125,28 +125,14 @@ func NewDelete(log *slog.Logger, deleter storage.OrderService) gin.HandlerFunc {
 
 		log.Info("handling request")
 
-		alias := c.Param("id")
-		if alias == "" {
-			log.Info("id is empty")
-
-			c.JSON(400, gin.H{
-				"error": "invalid request",
-			})
+		uuidParam, ok := uuidparam.UUIDFromCtx(c, "id")
+		if ok {
 			return
 		}
 
-		id, err := uuid.Parse(alias)
-		if err != nil {
-			log.Info("invalid uuid format", slog.String("id", alias), slog.Any("error", err))
-			c.JSON(400, gin.H{
-				"error": "invalid id format",
-			})
-			return
-		}
-
-		err1 := deleter.DeleteURL(id)
-		if errors.Is(err1, storage.ErrUrlNotFound) {
-			log.Info("url not found", "id", alias)
+		err := deleter.DeleteURL(uuidParam)
+		if errors.Is(err, storage.ErrUrlNotFound) {
+			log.Info("url not found", "id", uuidParam)
 
 			c.JSON(400, gin.H{
 				"error": "not found",
@@ -155,7 +141,7 @@ func NewDelete(log *slog.Logger, deleter storage.OrderService) gin.HandlerFunc {
 			return
 		}
 
-		if err1 != nil {
+		if err != nil {
 			log.Error("failed to delete url", sl.Err(err))
 
 			c.JSON(500, gin.H{
@@ -165,7 +151,7 @@ func NewDelete(log *slog.Logger, deleter storage.OrderService) gin.HandlerFunc {
 			return
 		}
 
-		log.Info("deleted url", slog.String("deleted", alias))
+		log.Info("deleted url", slog.Any("deleted", uuidParam))
 
 		responseOK(c)
 	}
@@ -179,34 +165,9 @@ func NewGetAll(log *slog.Logger, get storage.OrderService) gin.HandlerFunc {
 
 		log.Info("handling request")
 
-		var req Request
-
-		if err := validator.New().Struct(req); err != nil {
-			validateErr := err.(validator.ValidationErrors)
-
-			log.Error("invalid request", sl.Err(err))
-
-			c.JSON(400, gin.H{
-				"error":   "validation failed",
-				"details": formatValidationError(validateErr),
-			})
-
-			return
-		}
-
-		ids := c.Param("ids")
-		if ids == "" {
-			log.Info("ids is empty")
-
-			c.JSON(400, gin.H{
-				"error": "invalid request",
-			})
-			return
-		}
-
 		resURL, err := get.GetAllURL()
 		if errors.Is(err, storage.ErrUrlNotFound) {
-			log.Info("urls not found", "ids", ids)
+			log.Info("urls not found")
 
 			c.JSON(400, gin.H{
 				"error": "not found",
@@ -241,43 +202,13 @@ func NewGetById(log *slog.Logger, get storage.OrderService) gin.HandlerFunc {
 
 		log.Info("handling request")
 
-		var req RequestFullStruct
-
-		if err := validator.New().Struct(req); err != nil {
-			validateErr := err.(validator.ValidationErrors)
-
-			log.Error("invalid request", sl.Err(err))
-
-			c.JSON(400, gin.H{
-				"error":   "validation failed",
-				"details": formatValidationError(validateErr),
-			})
-
+		uuidParam, ok := uuidparam.UUIDFromCtx(c, "id")
+		if ok {
 			return
 		}
-
-		alias := c.Param("id")
-		if alias == "" {
-			log.Info("id is empty")
-
-			c.JSON(400, gin.H{
-				"error": "invalid request",
-			})
-			return
-		}
-
-		id, err := uuid.Parse(alias)
-		if err != nil {
-			log.Info("invalid uuid format", slog.String("id", alias), slog.Any("error", err))
-			c.JSON(400, gin.H{
-				"error": "invalid id format",
-			})
-			return
-		}
-
-		resURL, err := get.GetByIdURL(id)
+		resURL, err := get.GetByIdURL(uuidParam)
 		if errors.Is(err, storage.ErrUrlNotFound) {
-			log.Info("url not found", "id", id)
+			log.Info("url not found", slog.String("id", uuidParam.String()))
 
 			c.JSON(400, gin.H{
 				"error": "not found",
@@ -374,25 +305,6 @@ func NewIsOrderCreated(log *slog.Logger, ord storage.OrderService) gin.HandlerFu
 
 		log.Info("handling request")
 
-		alias := c.Param("id")
-		if alias == "" {
-			log.Info("id is empty")
-
-			c.JSON(400, gin.H{
-				"error": "invalid request",
-			})
-			return
-		}
-
-		id, err := uuid.Parse(alias)
-		if err != nil {
-			log.Info("invalid uuid format", slog.String("id", alias), slog.Any("error", err))
-			c.JSON(400, gin.H{
-				"error": "invalid id format",
-			})
-			return
-		}
-
 		var req Request
 
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -420,7 +332,12 @@ func NewIsOrderCreated(log *slog.Logger, ord storage.OrderService) gin.HandlerFu
 			return
 		}
 
-		resId, err := ord.IsOrderCreatedURL(id)
+		uuidParam, ok := uuidparam.UUIDFromCtx(c, "id")
+		if ok {
+			return
+		}
+
+		resId, err := ord.IsOrderCreatedURL(uuidParam)
 		if resId == false {
 			log.Info("url not found", "id", resId)
 
@@ -441,7 +358,7 @@ func NewIsOrderCreated(log *slog.Logger, ord storage.OrderService) gin.HandlerFu
 			return
 		}
 
-		log.Info("url exist", slog.Any("url", id))
+		log.Info("url exist", slog.Any("url", uuidParam))
 
 		responseOK(c)
 	}

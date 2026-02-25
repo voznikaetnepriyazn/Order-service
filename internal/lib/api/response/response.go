@@ -49,3 +49,11 @@ func ValidationError(errs validator.ValidationErrors) Response {
 		Error:  strings.Join(errMsgs, ", "),
 	}
 }
+
+func formatValidationError(err validator.ValidationErrors) map[string]string {
+	errors := make(map[string]string)
+	for _, e := range err {
+		errors[e.Field()] = e.Error()
+	}
+	return errors
+}
