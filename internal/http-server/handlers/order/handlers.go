@@ -4,7 +4,7 @@ import (
 	"errors"
 	"log/slog"
 
-	"Order/internal/http-server/middleware"
+	"Order/internal/http-server/middleware/logger"
 	resp "Order/internal/lib/api/response"
 	"Order/internal/lib/logger/sl"
 	"Order/internal/models/order"
@@ -41,11 +41,9 @@ func NewAdd(log *slog.Logger, adder storage.OrderService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		const op = "handlers.url.add.New"
 
-		//добавить ид запроса в лог
-		log = log.With(
-			slog.String("op", op),
-			slog.String("request_id", middleware.GetReqID(c.Request.Context())),
-		)
+		log := logger.FromCtx(c)
+
+		log.Info("handling request")
 
 		var req RequestFullStruct
 
@@ -123,10 +121,9 @@ func NewDelete(log *slog.Logger, deleter storage.OrderService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		const op = "handlers.url.delete.New"
 
-		log = log.With(
-			slog.String("op", op),
-			slog.String("request_id", middleware.GetReqID(c.Request.Context())),
-		)
+		log := logger.FromCtx(c)
+
+		log.Info("handling request")
 
 		alias := c.Param("id")
 		if alias == "" {
@@ -178,10 +175,9 @@ func NewGetAll(log *slog.Logger, get storage.OrderService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		const op = "handlers.url.getById.New"
 
-		log = log.With(
-			slog.String("op", op),
-			slog.Any("request_id", middleware.GetReqID(c.Request.Context())),
-		)
+		log := logger.FromCtx(c)
+
+		log.Info("handling request")
 
 		var req Request
 
@@ -241,10 +237,9 @@ func NewGetById(log *slog.Logger, get storage.OrderService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		const op = "handlers.url.getById.New"
 
-		log = log.With(
-			slog.String("op", op),
-			slog.String("request_id", middleware.GetReqID(c.Request.Context())),
-		)
+		log := logger.FromCtx(c)
+
+		log.Info("handling request")
 
 		var req RequestFullStruct
 
@@ -313,10 +308,9 @@ func NewUpdate(log *slog.Logger, update storage.OrderService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		const op = "handlers.url.update.New"
 
-		log = log.With(
-			slog.String("op", op),
-			slog.Any("request_id", middleware.GetReqID(c.Request.Context())),
-		)
+		log := logger.FromCtx(c)
+
+		log.Info("handling request")
 
 		var req RequestFullStruct
 
@@ -376,10 +370,9 @@ func NewIsOrderCreated(log *slog.Logger, ord storage.OrderService) gin.HandlerFu
 	return func(c *gin.Context) {
 		const op = "handlers.url.IsOrderCreated.New"
 
-		log = log.With(
-			slog.String("op", op),
-			slog.Any("request_id", middleware.GetReqID(c.Request.Context())),
-		)
+		log := logger.FromCtx(c)
+
+		log.Info("handling request")
 
 		alias := c.Param("id")
 		if alias == "" {
