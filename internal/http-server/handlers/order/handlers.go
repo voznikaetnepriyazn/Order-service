@@ -14,7 +14,6 @@ import (
 	"Order/internal/storage"
 
 	"github.com/gin-gonic/gin"
-	"github.com/go-playground/validator/v10"
 )
 
 type Response struct {
@@ -53,7 +52,9 @@ func NewAdd(log *slog.Logger, adder storage.OrderService) gin.HandlerFunc {
 			return
 		}
 
-		valid := valid.Validate(&req)
+		if !valid.Validate(c, &req, log) {
+			return
+		}
 
 		//проверка на уже существующее значение
 		id, err := adder.AddURL(req.Order)
@@ -222,16 +223,7 @@ func NewUpdate(log *slog.Logger, update storage.OrderService) gin.HandlerFunc {
 			return
 		}
 
-		if err := validator.New().Struct(req); err != nil {
-			validateErr := err.(validator.ValidationErrors)
-
-			log.Error("invalid request", sl.Err(err))
-
-			c.JSON(400, gin.H{
-				"error":   "validation failed",
-				"details": valid.FormatValidationError(validateErr),
-			})
-
+		if !valid.Validate(c, &req, log) {
 			return
 		}
 
@@ -276,16 +268,7 @@ func NewIsOrderCreated(log *slog.Logger, ord storage.OrderService) gin.HandlerFu
 			return
 		}
 
-		if err := validator.New().Struct(req); err != nil {
-			validateErr := err.(validator.ValidationErrors)
-
-			log.Error("invalid request", sl.Err(err))
-
-			c.JSON(400, gin.H{
-				"error":   "validation failed",
-				"details": valid.FormatValidationError(validateErr),
-			})
-
+		if !valid.Validate(c, &req, log) {
 			return
 		}
 

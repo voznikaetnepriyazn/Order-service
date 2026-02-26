@@ -1,31 +1,34 @@
 package valid
 
 import (
-	"Order/internal/lib/logger/sl"
+	"errors"
 	"log/slog"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
 )
 
-func Validate(req interface{}) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		if err := validator.New().Struct(req); err != nil {
-			validateErr := err.(validator.ValidationErrors)
+var validate = validator.New()
 
-			slog.Error("invalid request", sl.Err(err))
-
-			c.JSON(400, gin.H{
-				"error":   "validation failed",
-				"details": FormatValidationError(validateErr),
-			})
-
-			c.Abort()
-
-			return
+func Validate(c *gin.Context, req interface{}, log *slog.Logger) bool {
+	if err := validate.Struct(req); err != nil {
+		var validateErr validator.ValidationErrors
+		if !errors.As(err, &validateErr) {
+			log.Error("unknown validation error", slog.Any("error", err))
+			c.JSON(500, gin.H{
+				"error": "internal error"})
+			return false
 		}
-		c.Next()
+
+		log.Warn("validation failed", slog.Any("errors", FormatValidationError(validateErr)))
+
+		c.JSON(400, gin.H{
+			"error":   "validation failed",
+			"details": FormatValidationError(validateErr),
+		})
+		return false
 	}
+	return true
 }
 
 func FormatValidationError(err validator.ValidationErrors) map[string]string {
