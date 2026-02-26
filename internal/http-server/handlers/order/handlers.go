@@ -6,7 +6,9 @@ import (
 
 	"Order/internal/http-server/middleware/logger"
 	uuidparam "Order/internal/http-server/middleware/uuid"
+	valid "Order/internal/http-server/middleware/validate"
 	resp "Order/internal/lib/api/response"
+	bindjson "Order/internal/lib/logger/bind-json"
 	"Order/internal/lib/logger/sl"
 	"Order/internal/models/order"
 	"Order/internal/storage"
@@ -47,44 +49,23 @@ func NewAdd(log *slog.Logger, adder storage.OrderService) gin.HandlerFunc {
 
 		var req RequestFullStruct
 
-		//декодирование из джэйсона в структуру данных
-		if err := c.ShouldBindJSON(&req); err != nil {
-			log.Error("failed to decode request body", sl.Err(err))
-
-			c.JSON(400, gin.H{
-				"error": "failed to decode request",
-			})
-
+		if !bindjson.BindJSON(c, &req, log) {
 			return
 		}
 
-		log.Info("request body decoded", slog.Any("request", req))
-
-		//валидация - просто проверка на то, есть ли значение(в данном случае)
-		if err := validator.New().Struct(req); err != nil {
-			validateErr := err.(validator.ValidationErrors)
-
-			log.Error("invalid request", sl.Err(err))
-
-			c.JSON(400, gin.H{
-				"error":   "validation failed",
-				"details": formatValidationError(validateErr),
-			})
-
-			return
-		}
+		valid := valid.Validate(&req)
 
 		//проверка на уже существующее значение
 		id, err := adder.AddURL(req.Order)
-		/*if errors.Is(err, storage.ErrUrlExist) {
-			log.Info("url already exists", slog.Any("url", req.order))
+		if errors.Is(err, storage.ErrUrlExist) {
+			log.Info("url already exists", slog.Any("url", req.Order))
 
 			c.JSON(400, gin.H{
 				"error": "url already exists",
 			})
 
 			return
-		}*/
+		}
 
 		//прочие ошибки
 		if err != nil {
@@ -107,14 +88,6 @@ func responseOK(c *gin.Context) {
 	c.JSON(200, gin.H{
 		"status": "OK",
 	})
-}
-
-func formatValidationError(err validator.ValidationErrors) map[string]string {
-	errors := make(map[string]string)
-	for _, e := range err {
-		errors[e.Field()] = e.Error()
-	}
-	return errors
 }
 
 func NewDelete(log *slog.Logger, deleter storage.OrderService) gin.HandlerFunc {
@@ -245,17 +218,9 @@ func NewUpdate(log *slog.Logger, update storage.OrderService) gin.HandlerFunc {
 
 		var req RequestFullStruct
 
-		if err := c.ShouldBindJSON(&req); err != nil {
-			log.Error("failed to decode request body", sl.Err(err))
-
-			c.JSON(400, gin.H{
-				"error": "failed to decode request",
-			})
-
+		if !bindjson.BindJSON(c, &req, log) {
 			return
 		}
-
-		log.Info("request body decoded", slog.Any("request", req))
 
 		if err := validator.New().Struct(req); err != nil {
 			validateErr := err.(validator.ValidationErrors)
@@ -264,7 +229,7 @@ func NewUpdate(log *slog.Logger, update storage.OrderService) gin.HandlerFunc {
 
 			c.JSON(400, gin.H{
 				"error":   "validation failed",
-				"details": formatValidationError(validateErr),
+				"details": valid.FormatValidationError(validateErr),
 			})
 
 			return
@@ -307,17 +272,9 @@ func NewIsOrderCreated(log *slog.Logger, ord storage.OrderService) gin.HandlerFu
 
 		var req Request
 
-		if err := c.ShouldBindJSON(&req); err != nil {
-			log.Error("failed to decode request body", sl.Err(err))
-
-			c.JSON(400, gin.H{
-				"error": "failed to decode request",
-			})
-
+		if !bindjson.BindJSON(c, &req, log) {
 			return
 		}
-
-		log.Info("request body decoded", slog.Any("request", req))
 
 		if err := validator.New().Struct(req); err != nil {
 			validateErr := err.(validator.ValidationErrors)
@@ -326,7 +283,7 @@ func NewIsOrderCreated(log *slog.Logger, ord storage.OrderService) gin.HandlerFu
 
 			c.JSON(400, gin.H{
 				"error":   "validation failed",
-				"details": formatValidationError(validateErr),
+				"details": valid.FormatValidationError(validateErr),
 			})
 
 			return
