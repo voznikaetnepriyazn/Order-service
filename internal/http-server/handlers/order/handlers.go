@@ -6,10 +6,10 @@ import (
 
 	"Order/internal/http-server/middleware/logger"
 	uuidparam "Order/internal/http-server/middleware/uuid"
-	valid "Order/internal/http-server/middleware/validate"
 	resp "Order/internal/lib/api/response"
 	bindjson "Order/internal/lib/logger/bind-json"
 	"Order/internal/lib/logger/sl"
+	valid "Order/internal/lib/logger/validate"
 	"Order/internal/models/order"
 	"Order/internal/storage"
 
