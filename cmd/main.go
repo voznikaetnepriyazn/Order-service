@@ -2,13 +2,11 @@ package main
 
 /*TODO:
 подробнее обработать 500ы ошибки
-перенести некоторые проверки хэндлеров в мидлвейр
 контекст!!!!
 тесты
 норм названия переменных
 поле отмены заказа
 запросы с учетом sql иньекций
-env локально для паролей
 */
 
 import (
@@ -16,6 +14,7 @@ import (
 	handlers "Order/internal/http-server/handlers/order"
 	"Order/internal/http-server/middleware"
 	"Order/internal/http-server/middleware/logger"
+	"Order/internal/lib/logger/sl"
 
 	"Order/internal/storage"
 	"Order/internal/storage/postgresql"
@@ -44,23 +43,22 @@ func main() {
 
 	log.Debug("debug messages are enabled")
 
-	dbStorage, err := postgresql.New(cfg.StoragePath)
+	db, err := postgresql.New(cfg.DB.DSN())
 	if err != nil {
-		log.Error("failed to init storage", slog.Any("error", err))
-		os.Exit(1)
+		log.Fatal("failed to connect to database", sl.Err(err))
 	}
+	defer db.Close()
 
-	urlService := storage.OrderService(dbStorage)
+	urlService := storage.OrderService(db)
 
 	router := gin.Default()
-
 	router.Use(middleware.RequestID())
 	router.Use(logger.New(log))
 	router.Use(middleware.Recoverer(log))
 
 	registerHandlers(router, log, urlService)
 
-	addr := cfg.HttpServer.Address
+	addr := cfg.HTTPServer.Address
 	if addr == "" {
 		addr = ":8080"
 	}
@@ -74,17 +72,17 @@ func main() {
 }
 
 func registerHandlers(router *gin.Engine, log *slog.Logger, service storage.OrderService) {
-	router.POST("url/add", handlers.NewAdd(log, service))
+	router.POST("/url/add", handlers.NewAdd(log, service))
 
-	router.GET("url/getById", handlers.NewGetById(log, service))
+	router.GET("/url/getById", handlers.NewGetById(log, service))
 
-	router.GET("url/getAll", handlers.NewGetAll(log, service))
+	router.GET("/url/getAll", handlers.NewGetAll(log, service))
 
-	router.PUT("url/update/:oldId/:newId", handlers.NewUpdate(log, service))
+	router.PUT("/url/update/:oldId/:newId", handlers.NewUpdate(log, service))
 
-	router.DELETE("url/delete", handlers.NewDelete(log, service))
+	router.DELETE("/url/delete", handlers.NewDelete(log, service))
 
-	router.POST("url/isOrderCreated", handlers.NewIsOrderCreated(log, service))
+	router.POST("/url/isOrderCreated", handlers.NewIsOrderCreated(log, service))
 }
 
 func setUpLogger(env string) *slog.Logger { //конфигурация логгера

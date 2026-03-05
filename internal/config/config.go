@@ -1,45 +1,69 @@
 package config
 
 import (
+	"fmt"
 	"log"
-	"os"
 	"time"
 
 	"github.com/ilyakaznacheev/cleanenv"
+	_ "github.com/joho/godotenv"
 )
 
 //парсер конфига
 
 type Config struct {
-	Env         string `json:"env" env-default:"local" env-required:"true"`
-	HttpServer  `json:"http_server"`
-	StoragePath string `json:"storage_path" env-required:"true"`
+	Env        string     `env:"APP_ENV" env-default:"local" env-required:"true"`
+	DB         DBConfig   `env-prefix:"DB_"`
+	HTTPServer HttpServer `env-prefix:"HTTP_"`
+}
+
+type DBConfig struct {
+	Host     string `env:"HOST" env-required:"true"`
+	Port     int    `env:"PORT" env-default:"5432"`
+	User     string `env:"USER" env-default:"postgres"`
+	Password string `env:"PASSWORD" env-required:"true"`
+	Name     string `env:"NAME" env-required:"true"`
+	SSLMode  string `env:"SSLMode" env-default:"disable"`
+}
+
+// return connection string for PostgreSQL
+func (db DBConfig) DSN() string {
+	return fmt.Sprintf(
+		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
+		db.Host, db.Port, db.User, db.Password, db.Name, db.SSLMode,
+	)
 }
 
 type HttpServer struct {
-	Address     string        `json:"address" env-default:"localhost:8080"`
-	Timeout     time.Duration `json:"timeout" env-default:"10s"`
-	IdleTimeout time.Duration `json:"idle-timeout" env-default:"60s"`
+	Address     string `env:"ADDRESS" env-default:"localhost:8080"`
+	Timeout     int64  `env:"TIMEOUT" env-default:"4000000000"`      //nanoseconds
+	IdleTimeout int64  `env:"IDLE_TIMEOUT" env-default:"6000000000"` //nanoseconds
 }
 
-// инициализация - конструктор
+func (h HttpServer) AsDuration() time.Duration {
+	return time.Duration(h.Timeout)
+}
+
+func (h HttpServer) AsIdleDuration() time.Duration {
+	return time.Duration(h.IdleTimeout)
+}
+
 func MustLoad() *Config {
-	configPath := os.Getenv("CONFIG_PATH") //переменная окружения
-	if configPath == "" {
-		configPath = "config/local.json"
-		log.Printf("CONFIG_PATH not set, using default: %s", configPath)
-	}
-
-	//check is file exist
-	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		log.Fatalf("config file %s does not exist", configPath)
-	}
-
 	var cfg Config
 
-	if err := cleanenv.ReadConfig(configPath, &cfg); err != nil {
-		log.Fatalf("can not read config: %s", err)
+	if err := cleanenv.ReadEnv(&cfg); err != nil {
+		log.Fatalf("failed to load config from env: %s", err)
 	}
+
+	if cfg.Env == "" {
+		log.Fatal("APP_ENV cannot be empty")
+	}
+	if cfg.DB.DSN() == "" {
+		log.Fatal("database configuration is incomplete")
+	}
+
+	log.Printf("config loaded: env=%s, db=%s, http=%s",
+		cfg.Env, cfg.DB.Host, cfg.HTTPServer.Address)
 
 	return &cfg
 }
