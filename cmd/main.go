@@ -2,11 +2,9 @@ package main
 
 /*TODO:
 подробнее обработать 500ы ошибки
-контекст!!!!
 тесты
 норм названия переменных
 поле отмены заказа
-запросы с учетом sql иньекций
 */
 
 import (
@@ -18,12 +16,12 @@ import (
 
 	"Order/internal/storage"
 	"Order/internal/storage/postgresql"
-	"fmt"
 	"log/slog"
 	"os"
 
 	"github.com/gin-gonic/gin"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/joho/godotenv"
 )
 
 const (
@@ -33,11 +31,22 @@ const (
 )
 
 func main() {
+	if err := godotenv.Load(); err != nil {
+		slog.Error(".env file not found", sl.Err(err))
+	}
+
 	cfg := config.MustLoad()
 
-	fmt.Println(cfg) //это надо хранить в секретах
-
 	log := setUpLogger(cfg.Env)
+
+	if log == nil {
+		log = slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+			Level: slog.LevelInfo,
+		}))
+		slog.SetDefault(log)
+	} else {
+		slog.SetDefault(log)
+	}
 
 	log.Info("starting order servise", slog.String("env", cfg.Env))
 
@@ -45,7 +54,7 @@ func main() {
 
 	db, err := postgresql.New(cfg.DB.DSN())
 	if err != nil {
-		log.Fatal("failed to connect to database", sl.Err(err))
+		log.Error("failed to connect to database", sl.Err(err))
 	}
 	defer db.Close()
 

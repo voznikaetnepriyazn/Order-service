@@ -27,13 +27,20 @@ func New(storagePath string) (*Storage, error) {
 	return &Storage{db: db}, nil
 }
 
+func (s *Storage) Close() error {
+	if s.db != nil {
+		return s.db.Close()
+	}
+	return nil
+}
+
 func (s *Storage) AddURL(order order.Order) (uuid.UUID, error) {
 	const op = "storage.postgresql.addURL"
 
 	newID := uuid.New()
 
 	stmt, err := s.db.Prepare(
-		`INSERT INTO Order ("Id", "idOfCustomer") 
+		`INSERT INTO order (id, idOfCustomer) 
 		VALUES ($1, $2)
 		`)
 	if err != nil {
@@ -54,7 +61,7 @@ func (s *Storage) DeleteURL(id uuid.UUID) error {
 	const op = "storage.postgresql.deleteURL"
 
 	stmt, err := s.db.Prepare(
-		`DELETE FROM Order WHERE id=Id`)
+		`DELETE FROM order WHERE id=$1`)
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}
@@ -72,10 +79,9 @@ func (s *Storage) GetAllURL() ([]order.Order, error) {
 	const op = "storage.postgresql.getAllURL"
 
 	stmt, err := s.db.Prepare(`
-		SELECT Order.Id
-		FROM Order 
-		INNER JOIN dbo.GoodInOrder ON Order.IdOfClient = GoodInOrder.IdOfClient 
-		INNER JOIN Good ON GoodInOrder.Id = Good.Id
+		SELECT id, idOfCustomer
+		FROM order 
+		ORDER BY idOfCustomer ASC
 		`)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
@@ -105,7 +111,7 @@ func (s *Storage) GetByIdURL(id uuid.UUID) (uuid.UUID, error) {
 	const op = "storage.postgresql.getByIdURL"
 
 	stmt, err := s.db.Prepare(`
-	SELECT * FROM dbo.Order WHERE id=Id'
+	SELECT id, idOfCustomer FROM order WHERE id = $1'
 	`)
 	if err != nil {
 		return uuid.UUID{}, fmt.Errorf("%s: %w", op, err)
@@ -130,8 +136,10 @@ func (s *Storage) UpdateURL(order order.Order) error {
 	newID := uuid.New()
 
 	stmt, err := s.db.Prepare(
-		`INSERT INTO Order ("Id", "idOfCustomer") 
-		VALUES ($1, $2)
+		`UPDATE order
+		SET idOfCustomer = $1
+		WHERE id = $2
+		RETURNING id, idOfCustomer
 		`)
 	if err != nil {
 		return fmt.Errorf("%s: prepare statement: %w", op, err)

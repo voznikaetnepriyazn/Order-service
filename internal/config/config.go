@@ -9,8 +9,6 @@ import (
 	_ "github.com/joho/godotenv"
 )
 
-//парсер конфига
-
 type Config struct {
 	Env        string     `env:"APP_ENV" env-default:"local" env-required:"true"`
 	DB         DBConfig   `env-prefix:"DB_"`
